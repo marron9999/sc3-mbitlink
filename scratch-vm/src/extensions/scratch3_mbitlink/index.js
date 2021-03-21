@@ -191,7 +191,7 @@ class MBitLink {
 	*/
 	send (message) {
 		if (!this.isConnected()) {
-			console.info('[link.send][error]', "not connect");
+			//console.info('[link.send][error]', "not connect");
 			return;
 		}
 		if (this._busy) {
@@ -215,12 +215,15 @@ class MBitLink {
 		const output = this._encoder.encode(message + "\n");
 		const data = Base64Util.uint8ArrayToBase64(output);
 
-		this._ble.write(BLEUUID.service, BLEUUID.txChar, data, "base64", true).then(
-			() => {
-				this._busy = false;
-				window.clearTimeout(this._busyTimeoutID);
-			}
-		);
+		this._ble.write(BLEUUID.service, BLEUUID.txChar, data, "base64", true)
+		.then(() => {
+			this._busy = false;
+			window.clearTimeout(this._busyTimeoutID);
+		})
+		.catch(error => {
+			this._busy = false;
+			window.clearTimeout(this._busyTimeoutID);
+		});
 	}
 
 	/**
