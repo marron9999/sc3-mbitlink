@@ -214,16 +214,12 @@ class MBitLink {
 		//console.info('[link-send]', message);
 		const output = this._encoder.encode(message + "\n");
 		const data = Base64Util.uint8ArrayToBase64(output);
-
+		Promise.all([
 		this._ble.write(BLEUUID.service, BLEUUID.txChar, data, "base64", true)
-		.then(() => {
-			this._busy = false;
-			window.clearTimeout(this._busyTimeoutID);
-		})
-		.catch(error => {
-			this._busy = false;
-			window.clearTimeout(this._busyTimeoutID);
-		});
+		]);
+		window.clearTimeout(this._busyTimeoutID);
+		this._busy = false;
+		//console.info("send:done");
 	}
 
 	/**
@@ -252,8 +248,8 @@ class MBitLink {
 		const data = this._decoder.decode(input);
 		//console.info('[link:mess]', data);
 		
-		for(let i=0; i<this._runtime._mbitlink.extensions.length; i++) {
-			if(this._runtime._mbitlink.extensions[i].onMessage(data)) break;
+		for(let name in this._runtime._mbitlink.extensions) {
+			if(this._runtime._mbitlink.extensions[name].onMessage(data)) break;
 		}
 
 		if(BLETimeout > 100) {
