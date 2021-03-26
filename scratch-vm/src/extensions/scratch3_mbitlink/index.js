@@ -6,6 +6,7 @@ const formatMessage = require('format-message');
 const BLE = require('../../io/ble');
 const Base64Util = require('../../util/base64-util');
 const MbitLinkWebSocket = require('../../util/mbitlink-websocket');
+//const ScratchLinkBluetooth = require('../../util/scratch-link-bluetooth');
 
 /// rename: MicroBit -> MBitLink
 /// chage UUID
@@ -117,6 +118,12 @@ class MBitLink {
 	}
 
 	_linkSocketFactory(type) {
+		this._webSocket = true;
+//		if(window.navigator.bluetooth != undefined
+//		&& window.navigator.bluetooth != null) {
+//			this._webSocket = false;
+//			return new ScratchLinkBluetooth(type);
+//		}
 		return new MbitLinkWebSocket(type);
 	}
 
@@ -151,7 +158,6 @@ class MBitLink {
 			this._ble.connectPeripheral(id);
 		}
 	}
-
 	/**
 	* Disconnect from the micro:bit.
 	*/
@@ -184,6 +190,9 @@ class MBitLink {
 		}
 		return connected;
 	}
+	isWebSocket () {
+		return this._webSocket;
+	}
 
 	/**
 	* Send a message to the peripheral BLE socket.
@@ -212,7 +221,7 @@ class MBitLink {
 		}, 5000);
 
 		//console.info('[link-send]', message);
-		const output = this._encoder.encode(message + "\n");
+		const output = this._encoder.encode(message);
 		const data = Base64Util.uint8ArrayToBase64(output);
 		Promise.all([
 		this._ble.write(BLEUUID.service, BLEUUID.txChar, data, "base64", true)
