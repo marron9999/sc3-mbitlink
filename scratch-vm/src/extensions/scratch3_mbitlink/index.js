@@ -20,7 +20,6 @@ const MbitLinkWebSocket = require('../../util/mbitlink-websocket');
 // eslint-disable-next-line max-len
 const blockIconURI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAANSSURBVFhHzZbfS1NRHMB99kX/AJ998clH33rPFwnxR4IlJQoRJNlcpagwl2hGwVZQD2auHILC3CIJNtpCkrvptNTczB81m5lYW9vE3Pbt3LO74673O92M1jnwQb+fe875fj33HM/Nyxva4htU8gQqeQKVPIFKnkAlT6CSJ1DJE6jkCVTyBCpzyIZRD5hnoDJHxA/2wX2rHjy6jvRFojKHRCO/wKWqAf/LF3iRqPzHhDc8EFhysoJ+zNjB2VoNsXBQWaRCpBCPx8FsNsPExAT9iSE+M5lM4HA4jt9LKWxbx0BoOQd7/g02ZuneDVgbHsisQI/HA/n5+UCeZk1FRUVGha4Z7oP7dj3rG1gQwEVWMbUP5aiw2Wxo4qw5Mq/I9huzzM+QA7JlHWfOdbMOdt69lo9NDUKhkCyJxWKBbFpzczMbW1xcrCjSra4Dj/7wxH59NQLvNWSMFH962gfrzx+kL7C6miyxlOC0bWCA7CNpjpWVFVmyg8AOOFW1EF5dpD68/hEE8loh+pvGWzYTLPZdS19gcuLu7m4pHUBTUxMYDAYpUrZgMAjl5eUgCIJkgBWoVqvlyQiLfS3wdXKEeogdkIJrIPLZS+OdqUlwd1w8uUCj0UgTjY6OsmTpWmNjo6JPaWkpjcU/TjY/wfuwE3ymwUSB5B81LfBLYqV3Zxzgbr9wcoG9vb1SKoCSkhKorKyUImXzer1QVFQEVqtVMocrqFKpFAXOkpP7nayU+Hs09JO+8v1vPhqLfr7rcvoCxVeVnPy0TTxYyTmmp6dlyTbNQ+BqO8/c7uxbcF6vYrG4st5HXekL9Pv9bPKCggK6ybNpOp2OjS8sLJQnIjivnIXg8izzy+QOXn12l8XiAUnuT4YsIOj15OtCSvI3iLfQ0blTiZDrTmitgogvsf/ikRAIbTXkhC8cX6CI3W5Hk2ZCWVnZsYWJxPZC5LQ2gHibJN2mZRjmOy8pxypECnNzc9Df3w8ajQa0Wi1KT08PfT44mDiZmeAbewwftFdZf4jFyBdNLewK5BZL6UdRiP/Asq4dFu4cFiwDlTnEN/6Erl40hHxqiaAyR8TCAZhqOAPhtaX02wOVPIFKnkAlT6CSJ1DJE6jkCVTyBCp5ApU8gUpu2Mr7AzqIGagjqYZ9AAAAAElFTkSuQmCC';
 
-
 /**
  * A time interval to wait (in milliseconds) before reporting to the BLE socket
  * that data has stopped coming from the peripheral.
@@ -87,6 +86,11 @@ class MBitLink {
 		if( this._runtime._mbitlink == undefined)
 			this._runtime._mbitlink = { instance: null, extensions: [] };
 		this._runtime._mbitlink.instance = this;
+
+		if(this._runtime._mbitlink.microbit == undefined)
+			this._runtime._mbitlink.microbit = {};
+		this._runtime._mbitlink.microbit.level = 0;
+		this._runtime._mbitlink.microbit.name = "";
 
 		/**
 		* Interval ID for data reading timeout.
@@ -156,6 +160,7 @@ class MBitLink {
 	connect (id) {
 		if (this._ble) {
 			this._ble.connectPeripheral(id);
+			this._peripheralId = id;
 		}
 	}
 	/**
@@ -173,6 +178,8 @@ class MBitLink {
 	*/
 	_onReset () {
 		console.info('[link]', 'onReset');
+		this._runtime._mbitlink.microbit.level = 0;
+		this._runtime._mbitlink.microbit.name = "";
 		if (this._timeoutID) {
 			window.clearTimeout(this._timeoutID);
 			this._timeoutID = null;
@@ -238,7 +245,13 @@ class MBitLink {
 	_onConnect () {
 		//console.info('[link]', 'onConnect');
 		//this._ble.startNotifications(BLEUUID.service, BLEUUID.rxChar, this._onMessage);
-        this._ble.read(BLEUUID.service, BLEUUID.rxChar, true, this._onMessage);
+        this._ble.read(BLEUUID.service, BLEUUID.rxChar, true, this._onMessage)
+        .then(() => {
+			this._runtime._mbitlink.microbit.level = 0;
+			this._runtime._mbitlink.microbit.name =
+				this._ble._availablePeripherals[this._peripheralId].name;
+			this.send("RV\n");
+        });
 		if(BLETimeout > 100) {
 			this._timeoutID = window.setTimeout(
 				() => this._ble.handleDisconnectError(BLEDataStoppedError),
@@ -257,8 +270,10 @@ class MBitLink {
 		const data = this._decoder.decode(input);
 		//console.info('[link:mess]', data);
 		
-		for(let name in this._runtime._mbitlink.extensions) {
-			if(this._runtime._mbitlink.extensions[name].onMessage(data)) break;
+		if( ! this.onMessage(data)) {
+			for(let name in this._runtime._mbitlink.extensions) {
+				if(this._runtime._mbitlink.extensions[name].onMessage(data)) break;
+			}
 		}
 
 		if(BLETimeout > 100) {
@@ -269,6 +284,20 @@ class MBitLink {
 				BLETimeout
 			);
 		}
+	}
+
+	onMessage (data) {
+		if(data[0] == "D") {
+			if(data[1] == 'V') {
+				this._runtime._mbitlink.microbit.level = parseInt(data.substr(2));
+				return true;
+			}
+		}
+		return false;
+	}
+
+	get microbit () {
+		return this._runtime._mbitlink.microbit;
 	}
 }
 
@@ -310,13 +339,77 @@ class Scratch3_MBitLink_Blocks {
 	* @returns {object} metadata for this extension and its blocks.
 	*/
 	getInfo () {
+		this.setupTranslations ();
 		return {
 			id: Scratch3_MBitLink_Blocks.EXTENSION_ID,
 			name: Scratch3_MBitLink_Blocks.EXTENSION_NAME,
 			blockIconURI: blockIconURI,
 			showStatusButton: true,
-			blocks: [ ],
+			blocks: [
+				{
+					opcode: 'getMicrobitName',
+					text: formatMessage({
+						id: 'mbitlink.getMicrobitName',
+						default: 'name',
+						description: 'micro:bit name'
+					}),
+					blockType: BlockType.REPORTER
+				},
+				{
+					opcode: 'getMicrobitLevel',
+					text: formatMessage({
+						id: 'mbitlink.getMicrobitLevel',
+						default: 'version',
+						description: 'micro:bit version'
+					}),
+					blockType: BlockType.REPORTER
+				},
+				{
+					opcode: 'sendCommand',
+					text: formatMessage({
+						id: 'mbitlink.sendCommand',
+						default: 'send command [CMD]',
+						description: 'send command'
+					}),
+					blockType: BlockType.COMMAND,
+					arguments: {
+						CMD: {
+							type: ArgumentType.STRING,							defaultValue: " "
+						}
+					}
+				},
+			],
 		};
+	}
+
+	sendCommand(args) {
+		let cmd = args.CMD.trim();
+		if(cmd != "") {
+			this.instance.send(args.CMD + "\n");
+		}
+	}
+	getMicrobitLevel() {
+		return (this.instance.microbit).level;
+	}
+	getMicrobitName() {
+		return (this.instance.microbit).name;
+	}
+
+	setupTranslations () {
+		const localeSetup = formatMessage.setup();
+		const extTranslations = {
+			'ja': {
+			    "mbitlink.getMicrobitName": "名前",
+			    "mbitlink.getMicrobitLevel": "バージョン",
+			    "mbitlink.sendCommand": "コマンド[CMD]を送信する",
+			}
+		};
+		for (const locale in extTranslations) {
+			if (!localeSetup.translations[locale]) {
+				localeSetup.translations[locale] = {};
+			}
+			Object.assign(localeSetup.translations[locale], extTranslations[locale]);
+		}
 	}
 }
 
