@@ -6,7 +6,7 @@ const formatMessage = require('format-message');
 const BLE = require('../../io/ble');
 const Base64Util = require('../../util/base64-util');
 const MbitLinkWebSocket = require('../../util/mbitlink-websocket');
-//const ScratchLinkBluetooth = require('../../util/scratch-link-bluetooth');
+const ScratchLinkBluetooth = require('../../util/scratch-link-bluetooth');
 
 /// rename: MicroBit -> MBitLink
 /// chage UUID
@@ -117,17 +117,16 @@ class MBitLink {
 
 		this._onReset = this._onReset.bind(this);
 		this._onConnect = this._onConnect.bind(this);
+		this._onConnect_ = this._onConnect_.bind(this);
 		this._onMessage = this._onMessage.bind(this);
 		this._linkSocketFactory = this._linkSocketFactory.bind(this);
+		this._peripheralId = null;
+		this._webSocket = true;
 	}
 
 	_linkSocketFactory(type) {
-		this._webSocket = true;
-//		if(window.navigator.bluetooth != undefined
-//		&& window.navigator.bluetooth != null) {
-//			this._webSocket = false;
-//			return new ScratchLinkBluetooth(type);
-//		}
+		if( ! this._webSocket)
+			return new ScratchLinkBluetooth(type);
 		return new MbitLinkWebSocket(type);
 	}
 
@@ -180,6 +179,7 @@ class MBitLink {
 		console.info('[link]', 'onReset');
 		this._runtime._mbitlink.microbit.level = 0;
 		this._runtime._mbitlink.microbit.name = "";
+		this._peripheralId = null;
 		if (this._timeoutID) {
 			window.clearTimeout(this._timeoutID);
 			this._timeoutID = null;
@@ -198,7 +198,12 @@ class MBitLink {
 		return connected;
 	}
 	isWebSocket () {
-		return this._webSocket;
+		if(window.navigator.bluetooth != undefined
+		&& window.navigator.bluetooth != null) {
+			this._webSocket = false;
+			return false;
+		}
+		return true;
 	}
 
 	/**
@@ -246,18 +251,27 @@ class MBitLink {
 		//console.info('[link]', 'onConnect');
 		//this._ble.startNotifications(BLEUUID.service, BLEUUID.rxChar, this._onMessage);
         this._ble.read(BLEUUID.service, BLEUUID.rxChar, true, this._onMessage)
-        .then(() => {
-			this._runtime._mbitlink.microbit.level = 0;
-			this._runtime._mbitlink.microbit.name =
-				this._ble._availablePeripherals[this._peripheralId].name;
-			this.send("RV\n");
-        });
+        .then(this._onConnect_);
 		if(BLETimeout > 100) {
 			this._timeoutID = window.setTimeout(
 				() => this._ble.handleDisconnectError(BLEDataStoppedError),
 				BLETimeout
 			);
 		}
+	}
+	_onConnect_ () {
+		this._runtime._mbitlink.microbit.level = 0;
+		if(this._peripheralId == null) {
+			if(this._ble._connected) {
+				for(name in this._ble._availablePeripherals) {
+					this._peripheralId = name;
+					break;
+				}
+			}
+		}
+		this._runtime._mbitlink.microbit.name =
+			this._ble._availablePeripherals[this._peripheralId].name;
+		this.send("RV\n");
 	}
 
 	/**
@@ -350,7 +364,7 @@ class Scratch3_MBitLink_Blocks {
 					opcode: 'getMicrobitName',
 					text: formatMessage({
 						id: 'mbitlink.getMicrobitName',
-						default: 'name',
+						default: 'Name',
 						description: 'micro:bit name'
 					}),
 					blockType: BlockType.REPORTER
@@ -359,7 +373,7 @@ class Scratch3_MBitLink_Blocks {
 					opcode: 'getMicrobitLevel',
 					text: formatMessage({
 						id: 'mbitlink.getMicrobitLevel',
-						default: 'version',
+						default: 'Version',
 						description: 'micro:bit version'
 					}),
 					blockType: BlockType.REPORTER
@@ -368,7 +382,7 @@ class Scratch3_MBitLink_Blocks {
 					opcode: 'sendCommand',
 					text: formatMessage({
 						id: 'mbitlink.sendCommand',
-						default: 'send command [CMD]',
+						default: 'Send [CMD] command',
 						description: 'send command'
 					}),
 					blockType: BlockType.COMMAND,
