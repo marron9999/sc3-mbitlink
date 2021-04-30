@@ -358,6 +358,9 @@ class Scratch3_MBitLink_Blocks {
 			id: Scratch3_MBitLink_Blocks.EXTENSION_ID,
 			name: Scratch3_MBitLink_Blocks.EXTENSION_NAME,
 			blockIconURI: blockIconURI,
+			color1:   '#0FBDAC',
+			color2:   '#0DA59A',
+			color3:   '#0B8E89',
 			showStatusButton: true,
 			blocks: [
 				{
